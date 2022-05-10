@@ -94,16 +94,17 @@ for dir in dirs[1:]:
                     os.path.join(subfolder, file), dict_df[test])
 
 # 4. append the create time of each folder into the dataframe
-create_times = []
+modified_times = []
 for dir in dirs:
-    create_time = os.path.getctime(os.path.join(root, dir))
-    create_times.append(time.ctime(create_time))
-s1 = pd.Series(create_times, name='Create Time')
+    modified_time = os.path.getmtime(os.path.join(root, dir))
+    modified_times.append(time.strftime(
+        '%Y-%m-%d %H:%M:%S', time.localtime(modified_time)))
+s1 = pd.Series(modified_times, name='Last Modified Time')
 
 for test in test_items:
     dict_df[test] = pd.concat([s1, dict_df[test]], axis=1)
     dict_df[test].sort_values(
-        by='Create Time', inplace=True, ascending=False, ignore_index=True)
+        by='Last Modified Time', inplace=True, ascending=False, ignore_index=True)
     # 5. Shorten the cloumns by removing the test name
     cleanup_dict = {}
     for name in dict_df[test].columns:
