@@ -2,7 +2,9 @@ import os
 import sys
 import time
 import re
-from dash import Dash, html, dash_table
+import datetime
+from dash import Dash, html, dash_table, dcc
+from dash.dependencies import Input, Output
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 
@@ -10,8 +12,6 @@ colors = {
     'background': '#FFFFFF',
     'text': '#000000'
 }
-
-app = Dash(__name__)
 
 
 def creat_df_3dmark(input_xml):
@@ -94,11 +94,12 @@ for dir in dirs[1:]:
                     os.path.join(subfolder, file), dict_df[test])
 
 # 4. append the create time of each folder into the dataframe
+format_date = '%Y-%m-%d %H:%M:%S'
 modified_times = []
 for dir in dirs:
     modified_time = os.path.getmtime(os.path.join(root, dir))
     modified_times.append(time.strftime(
-        '%Y-%m-%d %H:%M:%S', time.localtime(modified_time)))
+        format_date, time.localtime(modified_time)))
 s1 = pd.Series(modified_times, name='Last Modified Time')
 
 for test in test_items:
@@ -112,14 +113,14 @@ for test in test_items:
             '-', ''), '', name, flags=re.IGNORECASE)
     dict_df[test].rename(columns=cleanup_dict, inplace=True)
 
-
+description_str = 'Dashboard last updated at '
 app.layout = html.Div(style={'backgroundColor': colors['background']}, children=[
     html.H1(children=headline, style={
         'textAlign': 'center',
         'color': colors['text']}
     ),
 
-    html.Div(children='This is a dashboard to show the 3DMark results', style={
+    html.Div(id='description_div', children=description_str, style={
         'textAlign': 'center',
         'color': colors['text']}
     ),
@@ -127,8 +128,9 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
     html.H2(children=test_items[0], style={'textAlign': 'center', 'color': colors['text']}
             ),
     dash_table.DataTable(
-        dict_df[test_items[0]].to_dict('records'),
-        [{"name": i, "id": i} for i in dict_df[test_items[0]].columns],
+        id='table_'+test_items[0],
+        data=dict_df[test_items[0]].to_dict('records'),
+        columns=[{"name": i, "id": i} for i in dict_df[test_items[0]].columns],
         style_as_list_view=True),
 
     html.H2(children=test_items[1], style={'textAlign': 'center', 'color': colors['text']}
@@ -158,7 +160,69 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
         dict_df[test_items[4]].to_dict('records'),
         [{"name": i, "id": i} for i in dict_df[test_items[4]].columns],
         style_as_list_view=True),
+
+    dcc.Interval(
+        id='interval-component',
+        interval=10*1000,  # in milliseconds
+        n_intervals=0
+    )
 ])
+
+
+@app.callback(Output('table_'+test_items[0], 'data'),
+              [Input('interval-component', 'n_intervals')])
+def update_table(n):
+    start_ptime = time.process_time()
+    start_time = time.time()
+    update_dirs = []
+    for r, d, f in os.walk(root):
+        for dir in d:
+            update_dirs.append(dir)
+    first_subfolder = os.path.join(root, update_dirs[0])
+    files = next(os.walk(first_subfolder), (None, None, []))[
+        2]  # [] if no file
+    for file in files:
+        if test_items[0]+'_' in file.lower():
+            update_df = creat_df_3dmark(os.path.join(first_subfolder, file))
+
+    for dir in update_dirs[1:]:
+        subfolder = os.path.join(root, dir)
+        files = next(os.walk(subfolder), (None, None, []))[2]
+        for file in files:
+            if test_items[0]+'_' in file.lower():
+                update_df = append_df_3dmark(os.path.join(
+                    subfolder, file), update_df)
+
+    modified_times = []
+    for dir in update_dirs:
+        modified_time = os.path.getmtime(os.path.join(root, dir))
+        modified_times.append(time.strftime(
+            format_date, time.localtime(modified_time)))
+    s1 = pd.Series(modified_times, name='Last Modified Time')
+
+    update_df = pd.concat([s1, update_df], axis=1)
+    update_df.sort_values(by='Last Modified Time', inplace=True,
+                          ascending=False, ignore_index=True)
+
+    cleanup_dict = {}
+    for name in update_df.columns:
+        cleanup_dict[name] = re.sub(test_items[0].replace(
+            '-', ''), '', name, flags=re.IGNORECASE)
+    update_df.rename(columns=cleanup_dict, inplace=True)
+
+    end_time = time.time()
+    end_ptime = time.process_time()
+    print('CPU time:', end_ptime-start_ptime,
+          'Execution time:', end_time-start_time)
+
+    return update_df.to_dict('records')
+
+
+@app.callback(Output('description_div', 'children'),
+              [Input('interval-component', 'n_intervals')])
+def update_description(n):
+    return description_str + ': ' + str(datetime.datetime.now())
+
 
 if __name__ == '__main__':
     app.run_server(debug=True, host='0.0.0.0')
