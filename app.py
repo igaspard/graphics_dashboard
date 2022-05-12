@@ -113,7 +113,7 @@ for test in test_items:
             '-', ''), '', name, flags=re.IGNORECASE)
     dict_df[test].rename(columns=cleanup_dict, inplace=True)
 
-description_str = 'Dashboard last updated at '
+description_str = 'Dashboard updated at '
 app.layout = html.Div(style={'backgroundColor': colors['background']}, children=[
     html.H1(children=headline, style={
         'textAlign': 'center',
@@ -181,9 +181,12 @@ def update_table(n):
     first_subfolder = os.path.join(root, update_dirs[0])
     files = next(os.walk(first_subfolder), (None, None, []))[
         2]  # [] if no file
+    match_files_path = []
     for file in files:
         if test_items[0]+'_' in file.lower():
             update_df = creat_df_3dmark(os.path.join(first_subfolder, file))
+            match_files_path.append(os.path.join(first_subfolder, file))
+            break
 
     for dir in update_dirs[1:]:
         subfolder = os.path.join(root, dir)
@@ -192,10 +195,12 @@ def update_table(n):
             if test_items[0]+'_' in file.lower():
                 update_df = append_df_3dmark(os.path.join(
                     subfolder, file), update_df)
+                match_files_path.append(os.path.join(subfolder, file))
+                break
 
     modified_times = []
-    for dir in update_dirs:
-        modified_time = os.path.getmtime(os.path.join(root, dir))
+    for path in match_files_path:
+        modified_time = os.path.getmtime(path)
         modified_times.append(time.strftime(
             format_date, time.localtime(modified_time)))
     s1 = pd.Series(modified_times, name='Last Modified Time')
