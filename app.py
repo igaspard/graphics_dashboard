@@ -230,4 +230,5 @@ def update_description(n):
 
 
 if __name__ == '__main__':
+    app.title = 'Dashboard'
     app.run_server(debug=True, host='0.0.0.0')
